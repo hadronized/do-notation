@@ -1,0 +1,13 @@
+[package]
+name = "doo"
+version = "0.1.0"
+license = "BSD-3-Clause"
+authors = ["Dimitri Sabadie <dimitri.sabadie@gmail.com>"]
+description = "Monadic do syntactic sugar"
+keywords = ["monad", "do"]
+categories = ["data-structures"]
+homepage = "https://github.com/phaazon/doo"
+repository = "https://github.com/phaazon/doo"
+documentation = "https://docs.rs/doo"
+readme = "README.md"
+edition = "2018"
