@@ -15,6 +15,7 @@ The syntax is very similar to what you find in Haskell:
 - The last line must be absent of `;` or contains the `return` keyword.
 - You can use `return` nowhere but on the last line.
 - A line containing a single expression with a semicolon is a valid statement and has the same effect as `_ <- expr`.
+- `let` bindings are allowed in the form `let <pattern> = <expr>;` and have the regular Rust meaning.
 
 ## How do I make my monad works with `m!`?
 
@@ -30,9 +31,9 @@ Then, you have to provide an `and_then` method, which is akin to Haskell’s `>>
 monads like `Option` and `Result<_, E>` don’t have `flat_map` defined on them but have `and_then`. The type signature
 is not enforced, but:
 
-- `and_then` must be a binary function taking a type `A`, a closure `A -> Monad<A>` and returns `Monad<A>`, where
+- `and_then` must be a binary function taking a type `A`, a closure `A -> Monad<B>` and returns `Monad<B>`, where
   `Monad` is the monad you are adding `and_then` for. For instance, if you are implementing it for `Option`,
-  `and_then` takes an `A`, a closure `A -> Option<A>` and returns an `Option<A>`.
+  `and_then` takes an `A`, a closure `A -> Option<B>` and returns an `Option<B>`.
 - `and_then` must move its first argument, which has to be `self`. The type of `Self` is not enforced.
 - `and_then`’s closure must take `A` with a `FnOnce` closure.
 

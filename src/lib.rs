@@ -13,6 +13,7 @@
 //! - The last line must be absent of `;` or contains the `return` keyword.
 //! - You can use `return` nowhere but on the last line.
 //! - A line containing a single expression with a semicolon is a valid statement and has the same effect as `_ <- expr`.
+//! - `let` bindings are allowed in the form `let <pattern> = <expr>;` and have the regular Rust meaning.
 //!
 //! ## How do I make my monad works with `m!`?
 //!
@@ -84,6 +85,12 @@ macro_rules! m {
   (return $r:expr ;) => {
     $crate::Lift::lift($r)
   };
+
+  // let-binding
+  (let $p:pat = $e:expr ; $($r:tt)*) => {{
+    let $p = $e;
+    m!($($r)*)
+  }};
 
   // const-bind
   (_ <- $x:expr ; $($r:tt)*) => {
@@ -270,7 +277,8 @@ mod tests {
 
     let ic = m! {
       _ <- IC::new("a");
-      return [1, 2, 3];
+      let x = if 1 == 1 { 3 } else { 0 };
+      return [1, 2, x];
     };
 
     assert_eq!(ic.value(), &[1, 2, 3]);

@@ -1,3 +1,9 @@
+# 0.1.2
+
+> Wed Jan 06, 2021
+
+- Add support for `let` bindings. It was missing. Sorry.
+
 # 0.1.1
 
 > Wed Jan 06, 2021
