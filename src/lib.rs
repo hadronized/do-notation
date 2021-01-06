@@ -28,9 +28,9 @@
 //! monads like `Option` and `Result<_, E>` don’t have `flat_map` defined on them but have `and_then`. The type signature
 //! is not enforced, but:
 //!
-//! - `and_then` must be a binary function taking a type `A`, a closure `A -> Monad<A>` and returns `Monad<A>`, where
+//! - `and_then` must be a binary function taking a type `A`, a closure `A -> Monad<B>` and returns `Monad<B>`, where
 //!   `Monad` is the monad you are adding `and_then` for. For instance, if you are implementing it for `Option`,
-//!   `and_then` takes an `A`, a closure `A -> Option<A>` and returns an `Option<A>`.
+//!   `and_then` takes an `A`, a closure `A -> Option<B>` and returns an `Option<B>`.
 //! - `and_then` must move its first argument, which has to be `self`. The type of `Self` is not enforced.
 //! - `and_then`’s closure must take `A` with a `FnOnce` closure.
 //!
