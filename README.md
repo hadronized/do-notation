@@ -1,33 +1,57 @@
 <!-- cargo-sync-readme start -->
 
-# Doo, the monadic `do` notation brought to Rust.
+# `do-notation`, the monadic `do` notation brought to Rust.
 
-This crate provides the `doo!` macro, which provides the Haskell monadic syntactic sugar `do`.
+This crate provides the `m!` macro, which provides the Haskell monadic syntactic sugar `do`.
+
+> Note: it is not possible to use the `do!` syntax as `do` is a reserved keyword in Rust.
+
 The syntax is very similar to what you find in Haskell:
 
-- You use the `doo!` macro; in Haskell, you use the `do` keyword. `do` is currently a reserved keyword
-  in Rust.
-- The `<-` operator is the _bind_ operator: it binds its left hand side to the monadic right hand side
+- You use the `m!` macro; in Haskell, you use the `do` keyword.
+- The `<-` syntactic sugar binds its left hand side to the monadic right hand side
   by _entering_ the right side via a closure.
-- Like almost any statement in Rust, you must end your statement with a `;`.
+- Like almost any statement in Rust, you must end your statement with a semicolon (`;`).
 - The last line must be absent of `;` or contains the `return` keyword.
 - You can use `return` nowhere but on the last line.
-- A line containing a single expression is a valid statement and has the same effect as `_ <- expr`.
+- A line containing a single expression with a semicolon is a valid statement and has the same effect as `_ <- expr`.
 
-# How do I make my monad works with `doo`?
+## How do I make my monad works with `m!`?
 
-You have to implement two traits: [`Pointed`] and [`Bind`]. Feel free to have a look at their
-documentation for further information.
+Because monads are higher-kinded types, it is not possible to define the monadic do-notation in a fully type-system
+elegant way. However, this crate is based on the rebindable concept in Haskell (i.e. you can change what the `>>=`
+operator’s types are), so `m!` has one type-system requirement and one syntactic requirement.
 
-# First example: fallible code
+First, you have to implement one trait: [`Lift`], which allows to _lift_ a value `A` into a _monadic structure of
+`A`_. For instance, lifting a `A` into the `Option` monad yields an `Option<A>`.
+
+Then, you have to provide an `and_then` method, which is akin to Haskell’s `>>=` operator. The choice of using
+`and_then` and not a proper name like `flat_map` or `bind` is due to the current state of the standard-library —
+monads like `Option` and `Result<_, E>` don’t have `flat_map` defined on them but have `and_then`. The type signature
+is not enforced, but:
+
+- `and_then` must be a binary function taking a type `A`, a closure `A -> Monad<A>` and returns `Monad<A>`, where
+  `Monad` is the monad you are adding `and_then` for. For instance, if you are implementing it for `Option`,
+  `and_then` takes an `A`, a closure `A -> Option<A>` and returns an `Option<A>`.
+- `and_then` must move its first argument, which has to be `self`. The type of `Self` is not enforced.
+- `and_then`’s closure must take `A` with a `FnOnce` closure.
+
+## Meaning of the `<-` operator
+
+The `<-` syntactic sugar is not strictly speaking an operator: it’s not valid vanilla Rust. Instead, it’s a trick
+defined in the `m!` allowing to use both [`Lift::lift`] and `and_then`. When you look at code inside a do-notation
+block, every monadic statements (separated with `;` in this crate) can be imagined as a new level of nesting inside
+a closure — the one passed to `and_then`, indeed.
+
+## First example: fallible code
 
 One of the first monadic application that people learn is the _fallible_ effect — `Maybe` in Haskell.
 In `Rust`, it’s `Option`. `Option` is an interesting monad as it allows you to fail early.
 
 ```rust
-use doo::doo;
+use do_notation::m;
 
-let r = doo! {
+let r = m! {
   x <- Some("Hello, world!");
   y <- Some(3);
   Some(x.len() * y)
@@ -37,16 +61,16 @@ assert_eq!(r, Some(39));
 ```
 
 The `binding <- expr` syntax unwraps the right part and binds it to `binding`, making it available to
-next calls. The final line re-enter the structure (here, `Option`) explicitly.
+next calls — remember, nested closures. The final line re-enters the structure (here, `Option`) explicitly.
 
-Note that it is possible to re-enter the structure without having to specify how (with `Option`, you
-re-enter with `Some`). You can use the `return` keyword, that will automatically lift the value into
-the right structure:
+Note that it is possible to re-enter the structure without having to specify how / knowing the structure
+(with `Option`, you re-enter with `Some`). You can use the `return` keyword, that will automatically lift the
+value into the right structure:
 
 ```rust
-use doo::doo;
+use do_notation::m;
 
-let r = doo! {
+let r = m! {
   x <- Some(1);
   y <- Some(2);
   z <- Some(3);

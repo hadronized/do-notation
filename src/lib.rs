@@ -1,31 +1,55 @@
-//! # Doo, the monadic `do` notation brought to Rust.
+//! # `do-notation`, the monadic `do` notation brought to Rust.
 //!
-//! This crate provides the `doo!` macro, which provides the Haskell monadic syntactic sugar `do`.
+//! This crate provides the `m!` macro, which provides the Haskell monadic syntactic sugar `do`.
+//!
+//! > Note: it is not possible to use the `do!` syntax as `do` is a reserved keyword in Rust.
+//!
 //! The syntax is very similar to what you find in Haskell:
 //!
-//! - You use the `doo!` macro; in Haskell, you use the `do` keyword. `do` is currently a reserved keyword
-//!   in Rust.
-//! - The `<-` operator is the _bind_ operator: it binds its left hand side to the monadic right hand side
+//! - You use the `m!` macro; in Haskell, you use the `do` keyword.
+//! - The `<-` syntactic sugar binds its left hand side to the monadic right hand side
 //!   by _entering_ the right side via a closure.
-//! - Like almost any statement in Rust, you must end your statement with a `;`.
+//! - Like almost any statement in Rust, you must end your statement with a semicolon (`;`).
 //! - The last line must be absent of `;` or contains the `return` keyword.
 //! - You can use `return` nowhere but on the last line.
-//! - A line containing a single expression is a valid statement and has the same effect as `_ <- expr`.
+//! - A line containing a single expression with a semicolon is a valid statement and has the same effect as `_ <- expr`.
 //!
-//! # How do I make my monad works with `doo`?
+//! ## How do I make my monad works with `m!`?
 //!
-//! You have to implement two traits: [`Pointed`] and [`Bind`]. Feel free to have a look at their
-//! documentation for further information.
+//! Because monads are higher-kinded types, it is not possible to define the monadic do-notation in a fully type-system
+//! elegant way. However, this crate is based on the rebindable concept in Haskell (i.e. you can change what the `>>=`
+//! operator’s types are), so `m!` has one type-system requirement and one syntactic requirement.
 //!
-//! # First example: fallible code
+//! First, you have to implement one trait: [`Lift`], which allows to _lift_ a value `A` into a _monadic structure of
+//! `A`_. For instance, lifting a `A` into the `Option` monad yields an `Option<A>`.
+//!
+//! Then, you have to provide an `and_then` method, which is akin to Haskell’s `>>=` operator. The choice of using
+//! `and_then` and not a proper name like `flat_map` or `bind` is due to the current state of the standard-library —
+//! monads like `Option` and `Result<_, E>` don’t have `flat_map` defined on them but have `and_then`. The type signature
+//! is not enforced, but:
+//!
+//! - `and_then` must be a binary function taking a type `A`, a closure `A -> Monad<A>` and returns `Monad<A>`, where
+//!   `Monad` is the monad you are adding `and_then` for. For instance, if you are implementing it for `Option`,
+//!   `and_then` takes an `A`, a closure `A -> Option<A>` and returns an `Option<A>`.
+//! - `and_then` must move its first argument, which has to be `self`. The type of `Self` is not enforced.
+//! - `and_then`’s closure must take `A` with a `FnOnce` closure.
+//!
+//! ## Meaning of the `<-` operator
+//!
+//! The `<-` syntactic sugar is not strictly speaking an operator: it’s not valid vanilla Rust. Instead, it’s a trick
+//! defined in the `m!` allowing to use both [`Lift::lift`] and `and_then`. When you look at code inside a do-notation
+//! block, every monadic statements (separated with `;` in this crate) can be imagined as a new level of nesting inside
+//! a closure — the one passed to `and_then`, indeed.
+//!
+//! ## First example: fallible code
 //!
 //! One of the first monadic application that people learn is the _fallible_ effect — `Maybe` in Haskell.
 //! In `Rust`, it’s `Option`. `Option` is an interesting monad as it allows you to fail early.
 //!
 //! ```rust
-//! use doo::doo;
+//! use do_notation::m;
 //!
-//! let r = doo! {
+//! let r = m! {
 //!   x <- Some("Hello, world!");
 //!   y <- Some(3);
 //!   Some(x.len() * y)
@@ -35,16 +59,16 @@
 //! ```
 //!
 //! The `binding <- expr` syntax unwraps the right part and binds it to `binding`, making it available to
-//! next calls. The final line re-enter the structure (here, `Option`) explicitly.
+//! next calls — remember, nested closures. The final line re-enters the structure (here, `Option`) explicitly.
 //!
-//! Note that it is possible to re-enter the structure without having to specify how (with `Option`, you
-//! re-enter with `Some`). You can use the `return` keyword, that will automatically lift the value into
-//! the right structure:
+//! Note that it is possible to re-enter the structure without having to specify how / knowing the structure
+//! (with `Option`, you re-enter with `Some`). You can use the `return` keyword, that will automatically lift the
+//! value into the right structure:
 //!
 //! ```rust
-//! use doo::doo;
+//! use do_notation::m;
 //!
-//! let r = doo! {
+//! let r = m! {
 //!   x <- Some(1);
 //!   y <- Some(2);
 //!   z <- Some(3);
@@ -55,25 +79,25 @@
 //! ```
 
 #[macro_export]
-macro_rules! doo {
+macro_rules! m {
   // return
   (return $r:expr ;) => {
-    $crate::Pointed::point($r)
+    $crate::Lift::lift($r)
   };
 
   // const-bind
   (_ <- $x:expr ; $($r:tt)*) => {
-    $crate::Bind::bind($x, |_| { doo!($($r)*) })
+    $x.and_then(|_| { m!($($r)*) })
   };
 
   // bind
   ($binding:ident <- $x:expr ; $($r:tt)*) => {
-    $crate::Bind::bind($x, |$binding| { doo!($($r)*) })
+    $x.and_then(|$binding| { m!($($r)*) })
   };
 
   // const-bind
   ($e:expr ; $($a:tt)*) => {
-    $crate::Bind::bind($e, |_| doo!($($a)*))
+    $e.and_then(|_| m!($($a)*))
   };
 
   // pure
@@ -82,73 +106,21 @@ macro_rules! doo {
   }
 }
 
-/// Pointed functors.
-///
-/// In simple terms, a pointed functor lifts a value into an object that adds a _default_ structure
-/// to it.
-pub trait Pointed<A> {
+/// Lift a value inside a monad.
+pub trait Lift<A> {
   /// Lift a value into a default structure.
-  fn point(a: A) -> Self;
+  fn lift(a: A) -> Self;
 }
 
-impl<A> Pointed<A> for Option<A> {
-  fn point(a: A) -> Self {
+impl<A> Lift<A> for Option<A> {
+  fn lift(a: A) -> Self {
     Some(a)
   }
 }
 
-impl<A, E> Pointed<A> for Result<A, E> {
-  fn point(a: A) -> Self {
+impl<A, E> Lift<A> for Result<A, E> {
+  fn lift(a: A) -> Self {
     Ok(a)
-  }
-}
-
-/// Monadic bind.
-///
-/// The monadi bind is a simple function that temporarily removes the structure and exposes a value to a
-/// lambda (λ). That λ then must re-enter the structure, eventually changing the type of the inner value.
-/// When the the lambda is called, it is passed as argument the previously unwrapped value, which then is
-/// _bound_ for the whole lifetime of the lambda.
-///
-/// Because Rust lacks kinds, the definition of [`Bind`] is a bit convoluted:
-///
-/// - The associated `A` type variable represents the value that will be unwrapped and presented to the
-///   λ.
-/// - The `B` value is the type the λ can switch to for the inner value.
-/// - The `Output` associated type variable is the final type after re-entering the structure. Rust doesn’t
-///   allow us to state that it must be the same structure as `Self`, but if we had kinds, you can imagine
-///   that the lambda is passed the `A` from `Self<A>` and `Output` is akin to `Self<B>`.
-/// - The λ, called `F`, is pretty straight-forward.
-pub trait Bind<B> {
-  type A;
-  type Output;
-
-  fn bind<F>(self, f: F) -> Self::Output
-  where
-    F: FnOnce(Self::A) -> Self::Output;
-}
-
-impl<A, B> Bind<B> for Option<A> {
-  type A = A;
-  type Output = Option<B>;
-
-  fn bind<F>(self, f: F) -> Self::Output
-  where
-    F: FnOnce(Self::A) -> Self::Output,
-  {
-    self.and_then(f)
-  }
-}
-
-impl<A, B, E> Bind<B> for Result<A, E> {
-  type A = A;
-  type Output = Result<B, E>;
-
-  fn bind<F>(self, f: F) -> Self::Output
-  where
-    F: FnOnce(Self::A) -> Self::Output,
-  {
-    self.and_then(f)
   }
 }
 
@@ -158,14 +130,14 @@ mod tests {
 
   #[test]
   fn option() {
-    let r: Option<i32> = doo! {
+    let r: Option<i32> = m! {
       v <- Some(3);
       Some(v)
     };
 
     assert_eq!(r, Some(3));
 
-    let r: Option<i32> = doo! {
+    let r: Option<i32> = m! {
       v <- r;
       x <- Some(10);
       Some(v * x)
@@ -174,7 +146,7 @@ mod tests {
     assert_eq!(r, Some(30));
 
     let n: Option<i32> = None;
-    let r: Option<i32> = doo! {
+    let r: Option<i32> = m! {
       v <- Some(314);
       x <- n;
       Some(v * x)
@@ -182,7 +154,7 @@ mod tests {
 
     assert_eq!(r, None);
 
-    let r = doo! {
+    let r = m! {
       _ <- Some("a");
       b <- Some("b");
       _ <- Option::<&str>::None;
@@ -191,7 +163,7 @@ mod tests {
 
     assert_eq!(r, None);
 
-    let r = doo! {
+    let r = m! {
       _ <- Some("a");
       return "b";
     };
@@ -201,14 +173,14 @@ mod tests {
 
   #[test]
   fn result() {
-    let r: Result<i32, &str> = doo! {
+    let r: Result<i32, &str> = m! {
       v <- Ok(3);
       Ok(v)
     };
 
     assert_eq!(r, Ok(3));
 
-    let r: Result<i32, &str> = doo! {
+    let r: Result<i32, &str> = m! {
       v <- r;
       x <- Ok(10);
       Ok(v * x)
@@ -217,7 +189,7 @@ mod tests {
     assert_eq!(r, Ok(30));
 
     let n: Result<i32, &str> = Err("error");
-    let r: Result<i32, &str> = doo! {
+    let r: Result<i32, &str> = m! {
       v <- Ok(314);
       x <- n;
       Ok(v * x)
@@ -225,7 +197,7 @@ mod tests {
 
     assert_eq!(r, Err("error"));
 
-    let r = doo! {
+    let r = m! {
       _ <- Result::<&str, &str>::Ok("a");
       b <- Ok("b");
       _ <- Result::<&str, &str>::Err("nope");
@@ -242,7 +214,7 @@ mod tests {
       }
     }
 
-    let r = doo! {
+    let r = m! {
       x <- Ok(true);
       _ <- guard(1 == 2, "meh");
       Ok(x)
@@ -270,22 +242,8 @@ mod tests {
       fn count(&self) -> usize {
         self.count
       }
-    }
 
-    impl<A> Pointed<A> for IC<A> {
-      fn point(a: A) -> Self {
-        IC::new(a)
-      }
-    }
-
-    impl<A, B> Bind<B> for IC<A> {
-      type A = A;
-      type Output = IC<B>;
-
-      fn bind<F>(self, f: F) -> Self::Output
-      where
-        F: FnOnce(Self::A) -> Self::Output,
-      {
+      fn and_then<B>(self, f: impl FnOnce(A) -> IC<B>) -> IC<B> {
         let r = f(self.value);
 
         IC {
@@ -295,7 +253,13 @@ mod tests {
       }
     }
 
-    let ic = doo! {
+    impl<A> Lift<A> for IC<A> {
+      fn lift(value: A) -> Self {
+        Self::new(value)
+      }
+    }
+
+    let ic = m! {
       a <- IC::new(10);
       b <- IC::new(2);
       IC::new(a + b)
@@ -304,7 +268,7 @@ mod tests {
     assert_eq!(ic.value(), &12);
     assert_eq!(ic.count(), 3);
 
-    let ic = doo! {
+    let ic = m! {
       _ <- IC::new("a");
       return [1, 2, 3];
     };
