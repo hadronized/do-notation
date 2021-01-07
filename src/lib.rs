@@ -277,11 +277,18 @@ mod tests {
 
     let ic = m! {
       _ <- IC::new("a");
-      let x = if 1 == 1 { 3 } else { 0 };
-      return [1, 2, x];
+      let x = 2;
+
+      // test statements
+      let y = if 1 == 1 { 3 } else { 0 };
+
+      _ <- IC::new("b");
+      _ <- IC::new("c");
+
+      return [1, x, y];
     };
 
     assert_eq!(ic.value(), &[1, 2, 3]);
-    assert_eq!(ic.count(), 2);
+    assert_eq!(ic.count(), 4);
   }
 }
