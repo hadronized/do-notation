@@ -94,17 +94,17 @@ macro_rules! m {
 
   // const-bind
   (_ <- $x:expr ; $($r:tt)*) => {
-    $x.and_then(|_| { m!($($r)*) })
+    $x.and_then(move |_| { m!($($r)*) })
   };
 
   // bind
   ($binding:ident <- $x:expr ; $($r:tt)*) => {
-    $x.and_then(|$binding| { m!($($r)*) })
+    $x.and_then(move |$binding| { m!($($r)*) })
   };
 
   // const-bind
   ($e:expr ; $($a:tt)*) => {
-    $e.and_then(|_| m!($($a)*))
+    $e.and_then(move |_| m!($($a)*))
   };
 
   // pure
