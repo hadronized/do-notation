@@ -16,6 +16,8 @@ The syntax is very similar to what you find in Haskell:
 - You can use `return` nowhere but on the last line.
 - A line containing a single expression with a semicolon is a valid statement and has the same effect as `_ <- expr`.
 - `let` bindings are allowed in the form `let <pattern> = <expr>;` and have the regular Rust meaning.
+- The `do` notation syntax does not extend into inner code blocks; however, it can have its own `m!` block. For example:
+  `m! { outer_do... if exp { m! { inner_do... } } else { ... } ... }`.
 
 ## How do I make my monad works with `m!`?
 
